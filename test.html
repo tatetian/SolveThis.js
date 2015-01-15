@@ -1,0 +1,31 @@
+<html>
+<head>
+    <title>Test my_1d1q.js</title>
+    <link rel="stylesheet" href="css/SolveThis.css">
+    <link rel="stylesheet" href="css/font-awesome.min.css">
+    <script type="text/javascript" charset="utf9" src="lib/underscore-min.js"></script>
+    <script type="text/javascript" charset="utf9" src="SolveThis.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var container = document.getElementById('solvethis-container');
+        var options = {
+    //        map: SolveThis.Map.DEFAULT
+        };
+        var ui = new SolveThis.View(container, options);
+
+        // construct solver
+        //var options = {maxDepth: 25};
+        //var solver = new SolveThis.Solver(options);
+        //var map = ui.model.map();
+        //var evalMin = 0, evalMax = 20;
+        //var type = 'astar';  
+        //var evalFunc = SolveThis.createEvalFunc(type, map, evalMin, evalMax);
+        //var solution = solver.run(map, evalFunc);
+    });
+    </script>
+</head>
+<body>
+    <div id="solvethis-container" style="">
+    </div>
+</body>
+</html>

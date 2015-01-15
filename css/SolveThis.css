@@ -1,0 +1,90 @@
+.solvethis-view {
+    overflow:hidden;
+    font-family: sans-serif;
+    width: 380px;
+    text-align: center;
+}
+.solvethis-top {
+    position: relative;
+    margin: 8px 0;
+}
+.solvethis-bottom {
+    position: relative;
+    margin: 8px 0;
+}
+.solvethis-view button {
+    height: 36px;
+    background: black;
+    border-radius: 4px;
+    border: none;
+    font: normal normal normal 18px/1 FontAwesome;
+    color: white;
+    margin: 0 3px;
+}
+.solvethis-view button:hover{
+    color: rgb(145, 236, 255);
+    cursor: pointer;
+}
+.solvethis-top button {
+    position: absolute;
+    width: 28px;
+}
+.solvethis-top button.left {
+    left: 0px;
+    top: 0px;
+}
+.solvethis-top button.right {
+    right: 0px;
+    top: 0px;
+}
+.solvethis-steps {
+    width: 96px;
+    height: 36px;
+    margin: 0 auto;
+}
+.solvethis-steps h1{
+    font-size: 12px;
+    height: 12px;
+    margin: 0 0;
+    font-weight: normal;
+}
+.solvethis-steps p{
+    font-size: 24px;
+    height: 24px;
+    margin: 0 0;
+}
+.solvethis-bottom-group {
+    margin: 4px;
+}
+.solvethis-view sub {
+    font-size: 14px;
+}
+.solvethis-svg {
+   background-color: #777777; 
+}
+.solvethis-tile {
+    stroke-width:1;
+    stroke: #999999;
+    fill: #000000;
+    fill-opacity: 0.0;
+}
+.solvethis-tile.occupied{
+    fill-opacity: 1.0;
+}
+.solvethis-tile.target{
+    stroke: #000000;
+}
+.solvethis-slide > polygon{
+}
+.solvethis-slide > polygon.upper-left{
+    fill: #EEEEEE;
+}
+.solvethis-slide > polygon.lower-right{
+    fill: #CCCCCC;
+}
+.solvethis-slide.on-target > polygon.upper-left{
+    fill: rgb(145, 236, 255);
+}
+.solvethis-slide.on-target > polygon.lower-right{
+    fill: rgb(122, 198, 214);
+}
