@@ -1,14 +1,13 @@
 # SolveThis.js
 SolveThis.js is an AI program written in JS that automatically solves a puzzle 
-game originally presented as [SolveThis+](https://github.com/tatetian/solvethis.js)
+game originally presented as [SolveThis+](https://itunes.apple.com/cn/app/solvethis+/id905858795)
 by PONOS, an Japanese game company.
 
 Here is a demo of SolveThis.js:
 
 <p data-height="620" data-theme-id="11840" data-slug-hash="GgvYqw" 
-data-default-tab="result" data-user="tatetian" class='codepen'>See the Pen <a 
-href='http://codepen.io/tatetian/pen/GgvYqw/'>SolveThis.js</a> by Tate Tian (<a 
-href='http://codepen.io/tatetian'>@tatetian</a>) on <a 
+data-default-tab="result" data-user="tatetian" class='codepen'>Here is a demo 
+of <a href='http://codepen.io/tatetian/pen/GgvYqw/'>SolveThis.js</a> on <a 
 href='http://codepen.io'>CodePen</a>.</p> <script async 
 src="//assets.codepen.io/assets/embed/ei.js"></script>
 
