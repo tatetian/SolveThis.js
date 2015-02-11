@@ -301,8 +301,8 @@ _.extend(SolveThis.View.prototype, {
         }
 
         var evalMin = 0, evalMax = 80;
-        var type = 'astar';
         // var type = 'expr';
+        var type = 'expr';
         var evalFunc = SolveThis.createEvalFunc(type, map, evalMin, evalMax);
 
         var options = {maxDepth: evalMax};
@@ -314,8 +314,8 @@ _.extend(SolveThis.View.prototype, {
         }
         // debug
         if (evalFunc.heuristic) {
-            console.log('Statistics of the heuristic:');
-            // console.log(evalFunc.heuristic.statistics());
+            console.log('Statistic of the heuristic:');
+            console.log(evalFunc.heuristic.statistic());
         }
 
         // play the solution
@@ -569,6 +569,7 @@ _.extend(SolveThis.Solver.prototype, {
         var exploredStatesCount = 0;
         var examinedStatesCount = 0;
 
+        var t0 = new Date();
         while (1) {
             if (exploredStatesCount % 100000 == 0)
                 console.debug(exploredStatesCount);
@@ -601,11 +602,14 @@ _.extend(SolveThis.Solver.prototype, {
                 }
             }
         }
+        var t1 = new Date();
+        // 9.75, 9.39, 9.45, 9.54, 9.55 - avg 9.4 for default map
+        console.log('Execution time: ' + (t1 - t0)/1000.0 + 's');
         console.debug('success');
         console.debug('# of explored states = ' + exploredStatesCount);
         console.debug('# of examined states = ' + examinedStatesCount);
         var path = this._targetState.path();
-        this._printPath(path, map);
+        // this._printPath(path, map);
         return path;
     },
     _printPath: function(path, map) {
@@ -777,28 +781,11 @@ function createAStarEvalFunc(map, min, max) {
 
 // A* search with sophisticated heuristics
 function createExprEvalFunc(map, min, max) {
-    // Create the heuristic to evaluate the expected future cost
-    var heuristic = (function(map) {
-        // preprocess the map to calcalculate the minimum distance, which can
-        // be used later by heuristic
-        SolveThis.Solver.Heuristic.extendMap(map);
+    SolveThis.Solver.extendMapForHeuristics(map);
 
-        var subproblemStrategy = {type: 'all', numBlocks: 1};
-        var h1b = new SolveThis.Solver.BlockHeuristic(
-                    "1-block", map, subproblemStrategy);
-        // var h1g = new SolveThis.Solver.GoalHeuristic(
-        //             "1-goal", map, subproblemStrategy);
-        return h1b;
-
-        // var sampleSize = map.goals.length;
-        // var strategy = {name: 'sampling', size: map.goals.length};
-        // var h2b = new BlockHeuristic("2-block", map, strategy);
-        // var h2g = new GoalHeuristic("2-goal", map, strategy);
-
-        // var H = new SolveThis.Solver.MultiHeuristic(
-        //             "multiple", h1b/*, h1g, h2b, h2g*/);
-        // return H;
-    })(map);
+    var h1b = new SolveThis.Solver.BlockHeuristic1(map);
+    var h1g = new SolveThis.Solver.GoalHeuristic1(map);
+    var heuristic = new SolveThis.Solver.MultiHeuristic(h1b, h1g);
 
     var evalFunc = function(state) {
         var c = state.depth;
@@ -806,7 +793,6 @@ function createExprEvalFunc(map, min, max) {
         var v = c + f;
         return Math.max(evalFunc.min, Math.min(evalFunc.max, v));
     };
-    // debug
     evalFunc.heuristic = heuristic;
 
     evalFunc.min = min; evalFunc.max = max;
@@ -817,210 +803,277 @@ function createExprEvalFunc(map, min, max) {
 // Heuristics
 //  Evaluation evaluation
 // ============================================
-SolveThis.Solver.Heuristic = function(name) {
-    this._name = name;
-}
-// The default heurstic is equivalent to wide-first search
-SolveThis.Solver.Heuristic.prototype.lowerBound = function(state) {
-    return 0;
-}
-SolveThis.Solver.Heuristic.prototype.name = function() {
-    return this._name;
-}
+SolveThis.Solver.MultiHeuristic = function MultiHeuristic() {
+    var hs = this._heuristics = arguments;
+    var size = hs.length;
+    assert(size > 0);
 
-SolveThis.Solver.MultiHeuristic = function(name) {
-    SolveThis.Solver.Heuristic.call(this, name);
-    var hs = this._heuristics = slice.call(arguments, 1);
-    assert(this._heuristics.length > 0);
-
-    this._statistic = {};
-    for (var hi in hs) {
-        var h = hs[hi];
-        var n = h.name();
-        assert(this._statistic[n] == undefined); // name must be unique
-        this._statistic[n] = 0;
-    }
+    var stat = this._statistic = new Array(size);
+    for (var si = 0; si < size; si++) stat[si] = 0;
 }
-_.extend(SolveThis.Solver.MultiHeuristic.prototype,
-    SolveThis.Solver.Heuristic.prototype, {
+_.extend(SolveThis.Solver.MultiHeuristic.prototype, {
     lowerBound: function(state) {
         var hs = this._heuristics;
-        var hlen = hs.length;
+        var size = hs.length;
+
+        var maxLowerBound = 0;
         var maxHi = 0;
-        var maxV = hs[maxHi].lowerBound(state);
-        for (var hi = 1; hi < hlen; hi++) {
-            v = hs[hi].lowerBound(state);
-            if (v > maxV) {
+        for (var hi = 0; hi < size; hi++) {
+            var h = hs[hi];
+            var lowerBound = h.lowerBound(state);
+            if (lowerBound > maxLowerBound) {
                 maxHi = hi;
-                maxV = v;
+                maxLowerBound = lowerBound;
             }
         }
-        this._statistics[hs[maxHi].name()]++;
-        return maxV;
+        this._statistic[maxHi]++;
+        return maxLowerBound;
     },
     statistic: function() {
-        var res = {};
-        var stat = this._statistics;
-        var total = 0;
-        for (var hn in stat) {
-            var count = res[hn] = stat[hn];
-            total += count;
-        }
-        res['_total_'] = total;
+        var stat = this._statistic;
+        var hs = this._heuristics;
+        var size = hs.length;
 
-        for (var hn in res) res[hn] /= total;
+        var res = {};
+        var total = 0;
+        for (var hi = 0; hi < size; hi++) {
+            var count = stat[hi];
+            total += count;
+
+            var heuristicName = hs[hi].constructor.name;
+            res[heuristicName] = count;
+        }
+
+        for (var name in res) res[name] /= total;
+        res['total'] = total;
         return res;
     }
 });
 
-SolveThis.Solver.BlockHeuristic = function(name, map, subproblemStrategy) {
-    SolveThis.Solver.Heuristic.call(this, name);
-    this._map = map;
-    // debug
-    console.log('map');
-    console.log(map.at(0,0));
-    this._goals = map.goals;
-    var k = this._k = subproblemStrategy.numBlocks;
+// 1-block subproblems
+SolveThis.Solver.BlockHeuristic1 = function BlockHeuristic1(map) {
+    var goals = map.goals;
+    var n = goals.length;
+    var distGoals = map.distGoals;
 
-    this._subproblems = null;
-    if (subproblemStrategy.type == 'all') {
-        this._subproblems = function(state) {
-            var allBlocks = state.mapMask.blocks();
-            // TODO: this should be combination
-            return FM.permutation(allBlocks, k);
-        }
-    }
-    // TODO: sampling
-};
-_.extend(SolveThis.Solver.BlockHeuristic.prototype,
-    SolveThis.Solver.Heuristic.prototype, {
-    _FOUR_DIRS: ["up", "dn", "lt", "dn"],
-    lowerBound: function(state) {
-        var map = this._map;
-        var allGoals = this._goals;
-        var n = allGoals.length;
-        var k = this._k;
-        var FOUR_DIRS = this._FOUR_DIRS;
-
-        // Iterate k-block subproblems, the optimal of which are not greater
-        // than that of the original problem
-        var subproblems = this._subproblems(state);
-        var lowerBound = 0;
-        while ((blocks = subproblems.next()) != undefined) {
-            var subproblemLowerBound = Infinity;
-
-            // Iterate all possible mappings between blocks and goals for a
-            // k-block problem, and calculate the lower bound for each mapping;
-            // Take the minimal of these lower bounds as the lower bound for
-            // the k-block problem
-            var mappings = FM.permutation(allGoals, k);
-            while ((goals = mappings.next()) != undefined) {
-                // For each mapping between blocks and goals, there may be
-                // several paths from a block to its corresponding goal. We
-                // enumerate all combinations of paths to find one with the
-                // minimal possible cost
-                var pathJoins = FM.crossjoin(FM.range(k), function(i) {
-                    var gi = goals[i].idx;
-                    var b = blocks[i];
-                    return map.distGoals[gi][b.r][b.c].paths;
-                });
-
-                var mappingLowerBound = Infinity;
-                while ((paths = pathJoins.next()) != undefined) {
-                    var dirMax = {up: 0, dn: 0, lt: 0, rt: 0};
-                    for (var pi in paths) {
-                        var path = paths[pi];
-                        dirMax.up = Math.max(dirMax.up, path.up);
-                        dirMax.dn = Math.max(dirMax.dn, path.dn);
-                        dirMax.lt = Math.max(dirMax.lt, path.lt);
-                        dirMax.rt = Math.max(dirMax.rt, path.rt);
-                    }
-                    var pathCost = dirMax.up + dirMax.dn + dirMax.lt + dirMax.rt;
-                    if (mappingLowerBound > pathCost)
-                        mappingLowerBound = pathCost;
-                }
-
-                // use the cost of most efficient mapping
-                if (subproblemLowerBound > mappingLowerBound)
-                    subproblemLowerBound = mappingLowerBound;
+    var minDist = this._minDist = new Array(8);
+    for (var r = 0; r < 8; r++) {
+        var row = minDist[r] = new Array(8);
+        for (var c = 0; c < 8; c++) {
+            var minDistRC = Infinity;
+            for (var gi = 0; gi < n; gi++) {
+                var dist = distGoals[gi][r][c].min;
+                if (dist < minDistRC) minDistRC = dist;
             }
-
-            // use the cost of 'hardest' subproblem
-            if (lowerBound < subproblemLowerBound)
-                lowerBound = subproblemLowerBound;
-        }
-        // console.log(state.toString(map));
-        // console.log(lowerBound);
-        // console.log();
-        return lowerBound;
-    }
-});
-
-SolveThis.Solver.GoalHeuristic = function(name, map, subproblemStrategy) {
-    SolveThis.Solver.Heuristic.call(this, name);
-    this._map = map;
-    var allGoals = this._goals = map.goals;
-    var k = this._k = subproblemStrategy.numGoals;
-
-    this._subproblems = null;
-    if (subproblemStrategy.type == 'all') {
-        this._subproblems = function() {
-            // TODO: this should be combination
-            return FM.permutation(allGoals, k);
+            minDist[r][c] = minDistRC;
         }
     }
-    // TODO: sampling
-};
-_.extend(SolveThis.Solver.GoalHeuristic.prototype,
-    SolveThis.Solver.Heuristic.prototype, {
-    _FOUR_DIRS: ["up", "dn", "lt", "dn"],
+
+    var blocks = this._blocks = new Array(n);
+    for (var bi = 0; bi < n; bi++) blocks[bi] = {r: 0, c: 0};
+}
+_.extend(SolveThis.Solver.BlockHeuristic1.prototype, {
     lowerBound: function(state) {
-        var map = this._map;
-        var allGoals = this._goals;
-        var n = allGoals.length;
-        var k = this._k;
-        var allBlocks = state.mapMask.blocks();
-        var FOUR_DIRS = this._FOUR_DIRS;
+        var minDist = this._minDist;
+        var blocks = this._blocks;
+        var n = blocks.length;
 
-        // Iterate k-goal subproblems, the optimal of which are not greater
-        // than that of the original problem
-        var lowerBound = FM.max(this._subproblems(), function(goals) {
-            // Iterate all possible mappings between blocks and goals for a
-            // k-goal problem, and calculate the lower bound for each mapping;
-            // Take the minimal of these lower bounds as the lower bound for
-            // the k-goal problem
-            var subproblemLowerBound =
-                FM.min(FM.permutation(allBlocks, k), function(blocks) {
-                // For each mapping between blocks and goals, there may be
-                // several paths from a block to its corresponding goal. We
-                // enumerate all combinations of paths to find one with the
-                // minimal possible cost
-                var mappingLowerBound = FM.min(
-                    // All possible combinations of block-goal paths
-                    FM.crossjoin(FM.range(k), function(i) {
-                        var gi = goals[i].idx;
-                        var b = blocks[i];
-                        return map.distGoals[gi][b.r][b.c].paths;
-                    }),
-                    // Return the miminal cost of a combination
-                    function(pathsJoin) {
-                        return FM.sum(FOUR_DIRS, function(dir) {
-                            return FM.max(pathsJoin, function(path) {
-                                return path[dir];
-                            });
-                        });
-                    }
-                );
-                return mappingLowerBound;
-            });
-            return subproblemLowerBound;
-        });
-        return lowerBound;
+        // get blocks of current state
+        state.mapMask.blocks(blocks);
+
+        var maxDist = -Infinity;
+        for (var bi = 0; bi < n; bi++) {
+            var b = blocks[bi];
+            var dist = minDist[b.r][b.c];
+            if (dist > maxDist) maxDist = dist;
+        }
+        return maxDist;
     }
 });
 
+// 1-goal subproblems
+SolveThis.Solver.GoalHeuristic1 = function GoalHeuristic1(map) {
+    var goals = this._goals = map.goals;
 
-SolveThis.Solver.Heuristic.extendMap = function(map) {
+    this._distGoals = map.distGoals;
+
+    var n = goals.length;
+    var blocks = this._blocks = new Array(n);
+    for (var bi = 0; bi < n; bi++) blocks[bi] = {r: 0, c: 0};
+}
+_.extend(SolveThis.Solver.GoalHeuristic1.prototype, {
+    lowerBound: function(state) {
+        var distGoals = this._distGoals;
+        var goals = this._goals;
+        var n = goals.length;
+
+        // get blocks of current state
+        var blocks = this._blocks;
+        state.mapMask.blocks(blocks);
+
+        var maxDist = -Infinity;
+        for (var gi = 0; gi < n; gi++) {
+            var thisGoalDists = distGoals[gi];
+            var minBlockDist = Infinity;
+            for (var bi = 0; bi < n; bi++) {
+                var b = blocks[bi];
+                var blockDist = thisGoalDists[b.r][b.c].min
+                if (blockDist < minBlockDist) minBlockDist = blockDist;
+            }
+            if (minBlockDist > maxDist) maxDist = minBlockDist;
+        }
+        return maxDist;
+    }
+});
+
+// SolveThis.Solver.BlockHeuristic = function(name, map, subproblemStrategy) {
+//     SolveThis.Solver.Heuristic.call(this, name);
+//     this._map = map;
+//     // debug
+//     console.log('map');
+//     console.log(map.at(0,0));
+//     this._goals = map.goals;
+//     var k = this._k = subproblemStrategy.numBlocks;
+//
+//     this._subproblems = null;
+//     if (subproblemStrategy.type == 'all') {
+//         this._subproblems = function(state) {
+//             var allBlocks = state.mapMask.blocks();
+//             // TODO: this should be combination
+//             return FM.permutation(allBlocks, k);
+//         }
+//     }
+//     // TODO: sampling
+// };
+// _.extend(SolveThis.Solver.BlockHeuristic.prototype,
+//     SolveThis.Solver.Heuristic.prototype, {
+//     _FOUR_DIRS: ["up", "dn", "lt", "dn"],
+//     lowerBound: function(state) {
+//         var map = this._map;
+//         var allGoals = this._goals;
+//         var n = allGoals.length;
+//         var k = this._k;
+//         var FOUR_DIRS = this._FOUR_DIRS;
+//
+//         // Iterate k-block subproblems, the optimal of which are not greater
+//         // than that of the original problem
+//         var subproblems = this._subproblems(state);
+//         var lowerBound = 0;
+//         while ((blocks = subproblems.next()) != undefined) {
+//             var subproblemLowerBound = Infinity;
+//
+//             // Iterate all possible mappings between blocks and goals for a
+//             // k-block problem, and calculate the lower bound for each mapping;
+//             // Take the minimal of these lower bounds as the lower bound for
+//             // the k-block problem
+//             var mappings = FM.permutation(allGoals, k);
+//             while ((goals = mappings.next()) != undefined) {
+//                 // For each mapping between blocks and goals, there may be
+//                 // several paths from a block to its corresponding goal. We
+//                 // enumerate all combinations of paths to find one with the
+//                 // minimal possible cost
+//                 var pathJoins = FM.crossjoin(FM.range(k), function(i) {
+//                     var gi = goals[i].idx;
+//                     var b = blocks[i];
+//                     return map.distGoals[gi][b.r][b.c].paths;
+//                 });
+//
+//                 var mappingLowerBound = Infinity;
+//                 while ((paths = pathJoins.next()) != undefined) {
+//                     var dirMax = {up: 0, dn: 0, lt: 0, rt: 0};
+//                     for (var pi in paths) {
+//                         var path = paths[pi];
+//                         dirMax.up = Math.max(dirMax.up, path.up);
+//                         dirMax.dn = Math.max(dirMax.dn, path.dn);
+//                         dirMax.lt = Math.max(dirMax.lt, path.lt);
+//                         dirMax.rt = Math.max(dirMax.rt, path.rt);
+//                     }
+//                     var pathCost = dirMax.up + dirMax.dn + dirMax.lt + dirMax.rt;
+//                     if (mappingLowerBound > pathCost)
+//                         mappingLowerBound = pathCost;
+//                 }
+//
+//                 // use the cost of most efficient mapping
+//                 if (subproblemLowerBound > mappingLowerBound)
+//                     subproblemLowerBound = mappingLowerBound;
+//             }
+//
+//             // use the cost of 'hardest' subproblem
+//             if (lowerBound < subproblemLowerBound)
+//                 lowerBound = subproblemLowerBound;
+//         }
+//         // console.log(state.toString(map));
+//         // console.log(lowerBound);
+//         // console.log();
+//         return lowerBound;
+//     }
+// });
+//
+// SolveThis.Solver.GoalHeuristic = function(name, map, subproblemStrategy) {
+//     SolveThis.Solver.Heuristic.call(this, name);
+//     this._map = map;
+//     var allGoals = this._goals = map.goals;
+//     var k = this._k = subproblemStrategy.numGoals;
+//
+//     this._subproblems = null;
+//     if (subproblemStrategy.type == 'all') {
+//         this._subproblems = function() {
+//             // TODO: this should be combination
+//             return FM.permutation(allGoals, k);
+//         }
+//     }
+//     // TODO: sampling
+// };
+// _.extend(SolveThis.Solver.GoalHeuristic.prototype,
+//     SolveThis.Solver.Heuristic.prototype, {
+//     _FOUR_DIRS: ["up", "dn", "lt", "dn"],
+//     lowerBound: function(state) {
+//         var map = this._map;
+//         var allGoals = this._goals;
+//         var n = allGoals.length;
+//         var k = this._k;
+//         var allBlocks = state.mapMask.blocks();
+//         var FOUR_DIRS = this._FOUR_DIRS;
+//
+//         // Iterate k-goal subproblems, the optimal of which are not greater
+//         // than that of the original problem
+//         var lowerBound = FM.max(this._subproblems(), function(goals) {
+//             // Iterate all possible mappings between blocks and goals for a
+//             // k-goal problem, and calculate the lower bound for each mapping;
+//             // Take the minimal of these lower bounds as the lower bound for
+//             // the k-goal problem
+//             var subproblemLowerBound =
+//                 FM.min(FM.permutation(allBlocks, k), function(blocks) {
+//                 // For each mapping between blocks and goals, there may be
+//                 // several paths from a block to its corresponding goal. We
+//                 // enumerate all combinations of paths to find one with the
+//                 // minimal possible cost
+//                 var mappingLowerBound = FM.min(
+//                     // All possible combinations of block-goal paths
+//                     FM.crossjoin(FM.range(k), function(i) {
+//                         var gi = goals[i].idx;
+//                         var b = blocks[i];
+//                         return map.distGoals[gi][b.r][b.c].paths;
+//                     }),
+//                     // Return the miminal cost of a combination
+//                     function(pathsJoin) {
+//                         return FM.sum(FOUR_DIRS, function(dir) {
+//                             return FM.max(pathsJoin, function(path) {
+//                                 return path[dir];
+//                             });
+//                         });
+//                     }
+//                 );
+//                 return mappingLowerBound;
+//             });
+//             return subproblemLowerBound;
+//         });
+//         return lowerBound;
+//     }
+// });
+//
+
+SolveThis.Solver.extendMapForHeuristics = function(map) {
     // Find out all goals squares
     var goals = map.goals = [];
     var gi = 0;
@@ -1036,7 +1089,6 @@ SolveThis.Solver.Heuristic.extendMap = function(map) {
     //      distGoals[ti][row][col] represents the shortest distance
     //      from (row, col) to ti-th goals
     var distGoals = map.distGoals = new Array(numGoals);
-
 
     // initialize
     for (var gi = 0; gi < numGoals; gi++) {
@@ -1255,12 +1307,15 @@ _.extend(SolveThis.Solver.MapMask.prototype, {
         if (another == this) return true;
         return this.HI == another.HI && this.LO == another.LO;
     },
-    blocks: function() {
-        var blocks = [];
+    blocks: function(blocks) {
+        var bi = blocks.length - 1;
         for (var ri = 0; ri < 8; ri++)
             for (var ci = 0; ci < 8; ci++)
-                if (this.get(ri, ci)) blocks.push({r: ri, c: ci});
-        return blocks;
+                if (this.get(ri, ci)) {
+                    var b = blocks[bi--];
+                    b.r = ri; b.c = ci
+                    if (bi < 0) return;
+                }
     },
     toString: function() {
         var res = '';

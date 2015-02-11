@@ -160,11 +160,9 @@ PermutationIterator.prototype.next = function() {
 
 var CartesianProductIterator = function(iterOfIter, func) {
     var sets = this._sets = FM.array(iterOfIter);
-    console.log(sets);
     for (var si in sets) {
         sets[si] = FM.array(func ? func(sets[si]) : sets[si]);
     }
-    console.log(sets);
     var lens = this._lens = _.map(sets, function(set) { return set.length; });
     var k = this._k = sets.length;
 
