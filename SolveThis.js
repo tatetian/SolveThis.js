@@ -904,37 +904,51 @@ _.extend(SolveThis.Solver.BlockHeuristic.prototype,
 
         // Iterate k-block subproblems, the optimal of which are not greater
         // than that of the original problem
-        var lowerBound = FM.max(this._subproblems(state), function(blocks) {
+        var subproblems = this._subproblems(state);
+        var lowerBound = 0;
+        while ((blocks = subproblems.next()) != undefined) {
+            var subproblemLowerBound = Infinity;
+
             // Iterate all possible mappings between blocks and goals for a
             // k-block problem, and calculate the lower bound for each mapping;
             // Take the minimal of these lower bounds as the lower bound for
             // the k-block problem
-            var subproblemLowerBound =
-                FM.min(FM.permutation(allGoals, k), function(goals) {
+            var mappings = FM.permutation(allGoals, k);
+            while ((goals = mappings.next()) != undefined) {
                 // For each mapping between blocks and goals, there may be
                 // several paths from a block to its corresponding goal. We
                 // enumerate all combinations of paths to find one with the
                 // minimal possible cost
-                var mappingLowerBound = FM.min(
-                    // All possible combinations of block-goal paths
-                    FM.crossjoin(FM.range(k), function(i) {
-                        var gi = goals[i].idx;
-                        var b = blocks[i];
-                        return map.distGoals[gi][b.r][b.c].paths;
-                    }),
-                    // Return the miminal cost of a combination
-                    function(pathsJoin) {
-                        return FM.sum(FOUR_DIRS, function(dir) {
-                            return FM.max(pathsJoin, function(path) {
-                                return path[dir];
-                            });
-                        });
+                var pathJoins = FM.crossjoin(FM.range(k), function(i) {
+                    var gi = goals[i].idx;
+                    var b = blocks[i];
+                    return map.distGoals[gi][b.r][b.c].paths;
+                });
+
+                var mappingLowerBound = Infinity;
+                while ((paths = pathJoins.next()) != undefined) {
+                    var dirMax = {up: 0, dn: 0, lt: 0, rt: 0};
+                    for (var pi in paths) {
+                        var path = paths[pi];
+                        dirMax.up = Math.max(dirMax.up, path.up);
+                        dirMax.dn = Math.max(dirMax.dn, path.dn);
+                        dirMax.lt = Math.max(dirMax.lt, path.lt);
+                        dirMax.rt = Math.max(dirMax.rt, path.rt);
                     }
-                );
-                return mappingLowerBound;
-            });
-            return subproblemLowerBound;
-        });
+                    var pathCost = dirMax.up + dirMax.dn + dirMax.lt + dirMax.rt;
+                    if (mappingLowerBound > pathCost)
+                        mappingLowerBound = pathCost;
+                }
+
+                // use the cost of most efficient mapping
+                if (subproblemLowerBound > mappingLowerBound)
+                    subproblemLowerBound = mappingLowerBound;
+            }
+
+            // use the cost of 'hardest' subproblem
+            if (lowerBound < subproblemLowerBound)
+                lowerBound = subproblemLowerBound;
+        }
         // console.log(state.toString(map));
         // console.log(lowerBound);
         // console.log();
