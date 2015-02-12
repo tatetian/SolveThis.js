@@ -308,14 +308,14 @@ _.extend(SolveThis.View.prototype, {
         var options = {maxDepth: evalMax};
         var solver = new SolveThis.Solver(options);
         var solution = solver.run(map, evalFunc, slidesMapMask);
-        if (solution == null) {
-            alert('Can\'t find any solution!');
-            return;
-        }
         // debug
         if (evalFunc.heuristic) {
             console.log('Statistic of the heuristic:');
             console.log(evalFunc.heuristic.statistic());
+        }
+        if (solution == null) {
+            alert('Can\'t find any solution!');
+            return;
         }
 
         // play the solution
@@ -779,21 +779,29 @@ function createAStarEvalFunc(map, min, max) {
     return evalFunc;
 }
 
-// A* search with sophisticated heuristics
+// A* search with more sophisticated heuristics
 function createExprEvalFunc(map, min, max) {
     SolveThis.Solver.extendMapForHeuristics(map);
 
+    var n = map.goals.length;
+
     var h1b = new SolveThis.Solver.BlockHeuristic1(map);
-    var h1g = new SolveThis.Solver.GoalHeuristic1(map);
-    var heuristic = new SolveThis.Solver.MultiHeuristic(h1b, h1g);
+    // var h1g = new SolveThis.Solver.GoalHeuristic1(map);
+    var heuristics = [h1b/*, h1g*/];
+    if (n > 1) {
+        // at least two goals to use this heuristic
+        var h2b = new SolveThis.Solver.BlockHeuristic2(map, h1b);
+        heuristics.push(h2b);
+    }
+    var H = new SolveThis.Solver.MultiHeuristic(heuristics);
 
     var evalFunc = function(state) {
         var c = state.depth;
-        var f = heuristic.lowerBound(state);
+        var f = H.lowerBound(state);
         var v = c + f;
         return Math.max(evalFunc.min, Math.min(evalFunc.max, v));
     };
-    evalFunc.heuristic = heuristic;
+    evalFunc.heuristic = H;
 
     evalFunc.min = min; evalFunc.max = max;
     return evalFunc;
@@ -803,10 +811,11 @@ function createExprEvalFunc(map, min, max) {
 // Heuristics
 //  Evaluation evaluation
 // ============================================
-SolveThis.Solver.MultiHeuristic = function MultiHeuristic() {
-    var hs = this._heuristics = arguments;
+SolveThis.Solver.MultiHeuristic = function MultiHeuristic(hs) {
     var size = hs.length;
     assert(size > 0);
+
+    this._heuristics = hs;
 
     var stat = this._statistic = new Array(size);
     for (var si = 0; si < size; si++) stat[si] = 0;
@@ -888,10 +897,16 @@ _.extend(SolveThis.Solver.BlockHeuristic1.prototype, {
             if (dist > maxDist) maxDist = dist;
         }
         return maxDist;
+    },
+    minDist: function(r, c) {
+        return this._minDist[r][c];
     }
 });
 
 // 1-goal subproblems
+// Note that experiment result suggests 1-goal subproblems are not quite useful
+// as their estimation are not as tight as 1-block subproblems but takes
+// more time
 SolveThis.Solver.GoalHeuristic1 = function GoalHeuristic1(map) {
     var goals = this._goals = map.goals;
 
@@ -926,152 +941,102 @@ _.extend(SolveThis.Solver.GoalHeuristic1.prototype, {
     }
 });
 
-// SolveThis.Solver.BlockHeuristic = function(name, map, subproblemStrategy) {
-//     SolveThis.Solver.Heuristic.call(this, name);
-//     this._map = map;
-//     // debug
-//     console.log('map');
-//     console.log(map.at(0,0));
-//     this._goals = map.goals;
-//     var k = this._k = subproblemStrategy.numBlocks;
-//
-//     this._subproblems = null;
-//     if (subproblemStrategy.type == 'all') {
-//         this._subproblems = function(state) {
-//             var allBlocks = state.mapMask.blocks();
-//             // TODO: this should be combination
-//             return FM.permutation(allBlocks, k);
-//         }
-//     }
-//     // TODO: sampling
-// };
-// _.extend(SolveThis.Solver.BlockHeuristic.prototype,
-//     SolveThis.Solver.Heuristic.prototype, {
-//     _FOUR_DIRS: ["up", "dn", "lt", "dn"],
-//     lowerBound: function(state) {
-//         var map = this._map;
-//         var allGoals = this._goals;
-//         var n = allGoals.length;
-//         var k = this._k;
-//         var FOUR_DIRS = this._FOUR_DIRS;
-//
-//         // Iterate k-block subproblems, the optimal of which are not greater
-//         // than that of the original problem
-//         var subproblems = this._subproblems(state);
-//         var lowerBound = 0;
-//         while ((blocks = subproblems.next()) != undefined) {
-//             var subproblemLowerBound = Infinity;
-//
-//             // Iterate all possible mappings between blocks and goals for a
-//             // k-block problem, and calculate the lower bound for each mapping;
-//             // Take the minimal of these lower bounds as the lower bound for
-//             // the k-block problem
-//             var mappings = FM.permutation(allGoals, k);
-//             while ((goals = mappings.next()) != undefined) {
-//                 // For each mapping between blocks and goals, there may be
-//                 // several paths from a block to its corresponding goal. We
-//                 // enumerate all combinations of paths to find one with the
-//                 // minimal possible cost
-//                 var pathJoins = FM.crossjoin(FM.range(k), function(i) {
-//                     var gi = goals[i].idx;
-//                     var b = blocks[i];
-//                     return map.distGoals[gi][b.r][b.c].paths;
-//                 });
-//
-//                 var mappingLowerBound = Infinity;
-//                 while ((paths = pathJoins.next()) != undefined) {
-//                     var dirMax = {up: 0, dn: 0, lt: 0, rt: 0};
-//                     for (var pi in paths) {
-//                         var path = paths[pi];
-//                         dirMax.up = Math.max(dirMax.up, path.up);
-//                         dirMax.dn = Math.max(dirMax.dn, path.dn);
-//                         dirMax.lt = Math.max(dirMax.lt, path.lt);
-//                         dirMax.rt = Math.max(dirMax.rt, path.rt);
-//                     }
-//                     var pathCost = dirMax.up + dirMax.dn + dirMax.lt + dirMax.rt;
-//                     if (mappingLowerBound > pathCost)
-//                         mappingLowerBound = pathCost;
-//                 }
-//
-//                 // use the cost of most efficient mapping
-//                 if (subproblemLowerBound > mappingLowerBound)
-//                     subproblemLowerBound = mappingLowerBound;
-//             }
-//
-//             // use the cost of 'hardest' subproblem
-//             if (lowerBound < subproblemLowerBound)
-//                 lowerBound = subproblemLowerBound;
-//         }
-//         // console.log(state.toString(map));
-//         // console.log(lowerBound);
-//         // console.log();
-//         return lowerBound;
-//     }
-// });
-//
-// SolveThis.Solver.GoalHeuristic = function(name, map, subproblemStrategy) {
-//     SolveThis.Solver.Heuristic.call(this, name);
-//     this._map = map;
-//     var allGoals = this._goals = map.goals;
-//     var k = this._k = subproblemStrategy.numGoals;
-//
-//     this._subproblems = null;
-//     if (subproblemStrategy.type == 'all') {
-//         this._subproblems = function() {
-//             // TODO: this should be combination
-//             return FM.permutation(allGoals, k);
-//         }
-//     }
-//     // TODO: sampling
-// };
-// _.extend(SolveThis.Solver.GoalHeuristic.prototype,
-//     SolveThis.Solver.Heuristic.prototype, {
-//     _FOUR_DIRS: ["up", "dn", "lt", "dn"],
-//     lowerBound: function(state) {
-//         var map = this._map;
-//         var allGoals = this._goals;
-//         var n = allGoals.length;
-//         var k = this._k;
-//         var allBlocks = state.mapMask.blocks();
-//         var FOUR_DIRS = this._FOUR_DIRS;
-//
-//         // Iterate k-goal subproblems, the optimal of which are not greater
-//         // than that of the original problem
-//         var lowerBound = FM.max(this._subproblems(), function(goals) {
-//             // Iterate all possible mappings between blocks and goals for a
-//             // k-goal problem, and calculate the lower bound for each mapping;
-//             // Take the minimal of these lower bounds as the lower bound for
-//             // the k-goal problem
-//             var subproblemLowerBound =
-//                 FM.min(FM.permutation(allBlocks, k), function(blocks) {
-//                 // For each mapping between blocks and goals, there may be
-//                 // several paths from a block to its corresponding goal. We
-//                 // enumerate all combinations of paths to find one with the
-//                 // minimal possible cost
-//                 var mappingLowerBound = FM.min(
-//                     // All possible combinations of block-goal paths
-//                     FM.crossjoin(FM.range(k), function(i) {
-//                         var gi = goals[i].idx;
-//                         var b = blocks[i];
-//                         return map.distGoals[gi][b.r][b.c].paths;
-//                     }),
-//                     // Return the miminal cost of a combination
-//                     function(pathsJoin) {
-//                         return FM.sum(FOUR_DIRS, function(dir) {
-//                             return FM.max(pathsJoin, function(path) {
-//                                 return path[dir];
-//                             });
-//                         });
-//                     }
-//                 );
-//                 return mappingLowerBound;
-//             });
-//             return subproblemLowerBound;
-//         });
-//         return lowerBound;
-//     }
-// });
-//
+// 2-block subproblems
+SolveThis.Solver.BlockHeuristic2 = function BlockHeuristic2(map, h1) {
+    var goals = map.goals;
+    var distGoals = this._distGoals = map.distGoals;
+    var n = goals.length;
+    assert(n > 1);
+
+    var blocks = this._blocks = new Array(n);
+    for (var bi = 0; bi < n; bi++) blocks[bi] = {r: 0, c: 0};
+
+    // initialize pairMinDist
+    // use 1-dimensional array to simulate 4-dimensional array for speed
+    var numPairs = 8 * 8 * 8 * 8;
+    var pairMinDist = this._pairMinDist = new Array(numPairs);
+    for (var pi = 0; pi < numPairs; pi++) pairMinDist[pi] = -1;
+
+    for (var gi = 0; gi < n; gi++) {
+        var goal =goals[gi];
+        var gr = goal.r, gc = goal.c;
+        for (var r = 0; r < 8; r++) {
+            for (var c = 0; c < 8; c++) {
+                pairMinDist[this._at(gr, gc, r, c)] =
+                    pairMinDist[this._at(r, c, gr, gc)] =
+                    h1.minDist(r, c);
+            }
+        }
+    }
+}
+_.extend(SolveThis.Solver.BlockHeuristic2.prototype, {
+    _at: function(r0, c0, r1, c1) {
+        return (r0 << 9) + (c0 << 6) + (r1 << 3) + c1;
+    },
+    _calPairMinDist: function(r0, c0, r1, c1) {
+        var distGoals = this._distGoals;
+        var n = distGoals.length;
+        // Map the two blocks to two different goals
+        var costToAny2Goals = Infinity;
+        for (var gi0 = 0; gi0 < n; gi0++) {
+            var paths0 = distGoals[gi0][r0][c0].paths;
+            for (var gi1 = 0; gi1 < n; gi1++) {
+                if (gi0 == gi1) continue;
+                var paths1 = distGoals[gi1][r1][c1].paths;
+
+                // now we have choosen the two goals, let's give an estimate
+                // on the minimal cost from the two blocks to the two goals
+                var costTo2Goals = Infinity;
+                for (var pi0 in paths0) {
+                    var path0 = paths0[pi0];
+                    for (var pi1 in paths1) {
+                        var path1 = paths1[pi1];
+
+                        var costTo2GoalsByPaths=
+                            Math.max(path0.up, path1.up) +
+                            Math.max(path0.dn, path1.dn) +
+                            Math.max(path0.lt, path1.lt) +
+                            Math.max(path0.rt, path1.rt);
+
+                        if (costTo2GoalsByPaths < costTo2Goals)
+                            costTo2Goals = costTo2GoalsByPaths;
+                    }
+                }
+
+                if (costTo2Goals < costToAny2Goals) costToAny2Goals = costTo2Goals;
+            }
+        }
+        return costToAny2Goals;
+    },
+    _getPairMinDist: function(r0, c0, r1, c1) {
+        var pairMinDist = this._pairMinDist;
+        var minDist = pairMinDist[this._at(r0, c0, r1, c1)];
+        if (minDist < 0) {
+             minDist = pairMinDist[this._at(r0, c0, r1, c1)]
+                    = this._calPairMinDist(r0, c0, r1, c1);
+            assert(minDist >= 0);
+        }
+        return minDist;
+    },
+    lowerBound: function(state) {
+        var blocks = this._blocks;
+        var n = blocks.length;
+
+        // get blocks of current state
+        state.mapMask.blocks(blocks);
+
+        var maxDistAny2Block = 0;
+        for (var bi0 = 0; bi0 < n; bi0++) {
+            for (var bi1 = bi0 + 1; bi1 < n; bi1++) {
+                var b0 = blocks[bi0], b1 = blocks[bi1];
+                var minDist2Block = this._getPairMinDist(b0.r, b0.c, b1.r, b1.c);
+                if (minDist2Block > maxDistAny2Block)
+                    maxDistAny2Block = minDist2Block;
+            }
+        }
+        return maxDistAny2Block;
+    }
+});
 
 SolveThis.Solver.extendMapForHeuristics = function(map) {
     // Find out all goals squares
@@ -1096,7 +1061,7 @@ SolveThis.Solver.extendMapForHeuristics = function(map) {
         for (var r = 0; r < 8; r++) {
             distGoal[r] = new Array(8); // 8 cols per row
             for (var c = 0; c < 8; c++)
-                distGoal[r][c] = {min: -1, paths:undefined};
+                distGoal[r][c] = {min: Infinity, paths:[]};
         }
     }
 
@@ -1134,16 +1099,11 @@ SolveThis.Solver.extendMapForHeuristics = function(map) {
 
                     // if the neighour already has a shorter path then skip
                     var nbrDist = distGoal[neighbor.r][neighbor.c];
-                    if (nbrDist.min >= 0 && nbrDist.min < newDist) continue;
+                    if (nbrDist.min < newDist) continue;
 
-                    // discard longer paths if any
-                    if (nbrDist.min < 0) {
-                        nbrDist.min = newDist;
-                        nbrDist.paths = [];
+                    if (nbrDist.min > newDist) {
                         newWaveFront.push(neighbor);
-                    }
-                    else {
-                        assert(nbrDist.min == newDist);
+                        nbrDist.min = newDist;
                     }
 
                     // update paths
@@ -1540,7 +1500,6 @@ SolveThis.Map.PREDEFINED.push(new SolveThis.Map([
 // ]));
 // TODO: This one is really difficult.
 // Better strategy is required to automatically find the optimal solution.
-//
 // SolveThis.Map.PREDEFINED.push(new SolveThis.Map([
 //     'X .... X',
 //     '        ',
@@ -1552,4 +1511,5 @@ SolveThis.Map.PREDEFINED.push(new SolveThis.Map([
 //     'X .... X'
 // ]));
 SolveThis.Map.DEFAULT = SolveThis.Map.Simplest;
+// SolveThis.Map.DEFAULT = SolveThis.Map.PREDEFINED[SolveThis.Map.PREDEFINED.length-1];
 })(window);
