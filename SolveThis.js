@@ -788,11 +788,11 @@ function createExprEvalFunc(map, min, max) {
     var h1b = new SolveThis.Solver.BlockHeuristic1(map);
     // var h1g = new SolveThis.Solver.GoalHeuristic1(map);
     var heuristics = [h1b/*, h1g*/];
-    if (n > 1) {
-        // at least two goals to use this heuristic
-        var h2b = new SolveThis.Solver.BlockHeuristic2(map, h1b);
-        heuristics.push(h2b);
-    }
+    // if (n > 1) {
+    //     // at least two goals to use this heuristic
+    //     var h2b = new SolveThis.Solver.BlockHeuristic2(map, h1b);
+    //     heuristics.push(h2b);
+    // }
     var H = new SolveThis.Solver.MultiHeuristic(heuristics);
 
     var evalFunc = function(state) {
@@ -1014,7 +1014,6 @@ _.extend(SolveThis.Solver.BlockHeuristic2.prototype, {
         if (minDist < 0) {
              minDist = pairMinDist[this._at(r0, c0, r1, c1)]
                     = this._calPairMinDist(r0, c0, r1, c1);
-            assert(minDist >= 0);
         }
         return minDist;
     },
@@ -1163,8 +1162,6 @@ _.extend(SolveThis.Solver.PriorityQueue.prototype, {
         if (state.depth > this._maxDepth) return;
 
         state._eval = this._evalFunc(state);
-        assert(state._eval >= this._evalFunc.min);
-        assert(state._eval <= this._evalFunc.max);
 
         var qidx = this._eval2qidx(state._eval);
         this._queues[qidx].push(state);
@@ -1213,8 +1210,6 @@ _.extend(Queue.prototype, {
         return ele;
     },
     push: function(ele) {
-        assert(ele._qnext == undefined);
-        assert(ele._qpre == undefined);
         var oldFirst = this._head._qnext;
         ele._qpre = this._head;
         ele._qnext = oldFirst;
@@ -1223,8 +1218,6 @@ _.extend(Queue.prototype, {
         this._size ++;
     },
     remove: function(ele) {
-        assert(ele._qnext);
-        assert(ele._qpre);
         var oldPre = ele._qpre,
             oldNext = ele._qnext;
         oldPre._qnext = oldNext;
